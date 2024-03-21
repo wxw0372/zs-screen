@@ -1,147 +1,111 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getParkInfoApi } from '@/api/park'
-// 引入echarts
-import * as echarts from 'echarts'
+import { ref, onMounted, computed } from 'vue'
+// 导入模型解析构造函数
+import { Application } from '@splinetool/runtime'
+import { getAreaInfoApi, getBuildingInfoApi } from '@/api/park.js'
 // 引入大屏适配
 import VScaleScreen from 'v-scale-screen'
-// 保存获取到的数据
-const parkInfo = ref({})
-// 获取园区信息方法
-const getParkInfo = async () => {
-  const res = await getParkInfoApi()
-  parkInfo.value = res.data
-}
+import { useParkInfo } from './composables/useParkInfo'
+import { useInitBarChart } from './composables/useInitBarChart'
+import { useInitPieChart } from './composables/useInitPieChart'
+const { parkInfo, getParkInfo } = useParkInfo()
+const { initBarChart } = useInitBarChart(parkInfo)
+const { initPieChart } = useInitPieChart(parkInfo)
 
-// 渲染年度收入分析图表import * as echarts from 'echarts'
-const initBarChart = () => {
-  // 1. 解构图表数据
-  const { parkIncome } = parkInfo.value
-  // 2. 准备options数据
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      }
-    },
-    grid: {
-      // 让图表占满容器
-      top: '10px',
-      left: '0px',
-      right: '0px',
-      bottom: '0px',
-      containLabel: true
-    },
-    xAxis: [
-      {
-        type: 'category',
-        axisTick: {
-          alignWithLabel: true,
-          show: false
-        },
-        data: parkIncome.xMonth
-      }
-    ],
-    yAxis: [
-      {
-        type: 'value',
-        splitLine: {
-          show: false
-        }
-      }
-    ],
-    series: [
-      {
-        name: '园区年度收入',
-        type: 'bar',
-        barWidth: '10px',
-        data: parkIncome.yIncome.map((item, index) => {
-          const color =
-            index % 2 === 0
-              ? new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                  { offset: 0.23, color: '#74c0f8' },
-                  { offset: 1, color: 'rgba(116,192,248,0.00)' }
-                ])
-              : new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                  { offset: 0.23, color: '#ff7152' },
-                  { offset: 1, color: 'rgba(255,113,82,0.00)' }
-                ])
-          return { value: item, itemStyle: { color } }
-        })
-      }
-    ],
-    textStyle: {
-      color: '#B4C0CC'
+// 初始化3d模型
+const ref3d = ref(null)
+const loadStatus = ref(false)
+const showModel = ref(false)
+let x = ref()
+let y = ref()
+const buildingInfo = ref('')
+const areaInfo = ref('')
+const init3dModel = () => {
+  loadStatus.value = true
+  // 实例化解析器实例
+  let spline = new Application(ref3d.value)
+  // 拉取模型
+  spline.load('https://fe-hmzs.itheima.net/scene.splinecode').then(() => {
+    // 模型加载完毕
+    console.log('3D模型加载并渲染完毕')
+    loadStatus.value = false
+  })
+
+  spline.addEventListener('mouseDown', (e) => {
+    x.value = ''
+    y.value = ''
+    // 坐标 没有
+    console.log('e', e)
+    // {name : '' , id : ''}
+    const params = e.target
+
+    // const obj = spline.findObjectByName(params.name)
+
+    console.log('obj', params)
+
+    buildingInfo.value = ''
+    areaInfo.value = ''
+    if (params.name.indexOf('办公楼') !== -1) {
+      console.log('楼宇')
+      console.log('--->', params.id)
+      getBuildingInfo(params.id)
+      window.addEventListener('mousedown', (e) => {
+        x.value = e.offsetX
+        y.value = e.offsetY
+      })
+    } else if (params.name.indexOf('停车场') !== -1) {
+      console.log('停车场')
+      getAreaInfo(params.id)
+      window.addEventListener('mousedown', (e) => {
+        x.value = e.offsetX
+        y.value = e.offsetY
+      })
     }
-  }
-  // 3. 渲染图表
-  const myChart = echarts.init(document.getElementById('barChart'))
-  option && myChart.setOption(option)
+    showModel.value = true
+  })
 }
 
-const initPieChart = () => {
-  const { parkIndustry } = parkInfo.value
-
-  const option = {
-    color: ['#00B2FF', '#2CF2FF', '#892CFF', '#FF624D', '#FFCF54', '#86ECA2'],
-    tooltip: {
-      trigger: 'item'
-    },
-    legend: {
-      // top: '5%',
-      left: 'center',
-      bottom: '0',
-      icon: 'rect',
-      itemWidth: 10,
-      itemHeight: 10,
-      textStyle: {
-        color: '#c6d1db'
-      }
-    },
-    series: [
-      {
-        name: '园区产业分析',
-        type: 'pie',
-        radius: ['55%', '60%'],
-        avoidLabelOverlap: false,
-        center: ['50%', '40%'],
-        label: {
-          show: false,
-          position: 'center'
-        },
-        tooltip: {
-          trigger: 'item',
-          formatter: function (params) {
-            return `${params.seriesName} <br/>${params.marker}  ${params.name} ${params.percent}%`
-          }
-        },
-        emphasis: {
-          label: {
-            show: false,
-            fontSize: 40,
-            fontWeight: 'bold'
-          }
-        },
-        labelLine: {
-          show: false
-        },
-        data: parkIndustry
-      }
-    ]
+const getBuildingInfo = async (id) => {
+  try {
+    const res = await getBuildingInfoApi(id)
+    console.log('res', res)
+    buildingInfo.value = res.data
+  } catch (e) {
+    console.log(e)
   }
-
-  const myChart = echarts.init(document.getElementById('pieChart'))
-
-  option && myChart.setOption(option)
 }
 
+const getAreaInfo = async (id) => {
+  try {
+    const res = await getAreaInfoApi(id)
+    console.log('area', res)
+    areaInfo.value = res.data
+  } catch (e) {
+    console.log(e)
+  }
+}
 onMounted(async () => {
   // 调用获取园区信息方法
   await getParkInfo()
   initBarChart()
   initPieChart()
+  init3dModel()
 })
+
+const modelStatus = computed(() => {
+  if (x.value && y.value) {
+    return true
+  } else {
+    return false
+  }
+})
+
+const close = () => {
+  x.value = ''
+  y.value = ''
+
+  console.log(x.value, y.value)
+}
 </script>
 <template>
   <VScaleScreen height="1080" width="1920">
@@ -217,6 +181,54 @@ onMounted(async () => {
           src="https://yjy-teach-oss.oss-cn-beijing.aliyuncs.com/smartPark/%E5%A4%A7%E5%B1%8F%E5%88%87%E5%9B%BE/%E5%9B%AD%E5%8C%BA%E4%BA%A7%E4%B8%9A%E5%88%86%E5%B8%83%402x.png"
         />
         <div id="pieChart" class="pie-chart">123</div>
+      </div>
+    </div>
+    <div class="model-container">
+      <LoadingComponent :loading="loadStatus"></LoadingComponent>
+      <!-- 准备3D渲染节点 -->
+      <canvas ref="ref3d" class="canvas-3d"></canvas>
+      <div
+        v-if="modelStatus"
+        id="t"
+        :class="{ animate__zoomIn: modelStatus }"
+        :style="{ left: x + 'px', top: y + 'px' }"
+        class="tip animate__animated"
+      >
+        <span class="close" @mousedown.stop="close"></span>
+        <div class="header">
+          <span v-if="buildingInfo">{{ buildingInfo.name }}</span>
+          <span v-else>{{ areaInfo.areaName }}</span>
+        </div>
+        <div class="content" v-if="buildingInfo">
+          <span class="content-left">
+            <span>楼层数：{{ buildingInfo.name }}</span>
+          </span>
+          <span class="content-left">
+            <span class="status" v-if="buildingInfo.status == 0">空置中</span>
+            <span class="status" v-else>已出租</span>
+          </span>
+        </div>
+        <div class="content" v-else>
+          <span class="content-left">
+            <span>空闲车位{{ areaInfo.remainSpaceNum }}</span>
+          </span>
+          <span class="content-left"> 占用率:{{ areaInfo.spaceProportion }} </span>
+        </div>
+        <div class="content-left">
+          <span v-if="buildingInfo">总面积(㎡)：{{ buildingInfo.area }}</span>
+          <span v-else>占用车位：{{ areaInfo.occupancySpaceNum }}</span>
+        </div>
+        <div class="content">
+          <span class="content-left" v-if="buildingInfo">
+            承租单位：
+            <span v-if="buildingInfo.rentEnterpriseName">{{
+              buildingInfo.rentEnterpriseName
+            }}</span>
+            <span v-else>暂无</span>
+          </span>
+          <span class="content-left" v-else> 停车位数：{{ areaInfo.totalSpaceNum }} </span>
+        </div>
+        <div class="content-left" v-if="areaInfo">面积(㎡)：{{ areaInfo.areaProportion }}</div>
       </div>
     </div>
   </VScaleScreen>
@@ -342,6 +354,46 @@ onMounted(async () => {
     margin: 0 auto;
     padding-bottom: 20px;
     width: 80%;
+  }
+}
+
+.model-container {
+  width: 100%;
+  height: 100%;
+  background: black;
+
+  .tip {
+    width: 281px;
+    background: url('@/assets/modal-bg.png') no-repeat;
+    background-size: cover;
+    padding: 15px;
+    color: #fff;
+    //display: none;
+    position: absolute;
+    //left: 0;
+    //top: 0;
+    .status {
+      border: 2.5px solid #075463;
+      padding: 3px 5px;
+    }
+    .close {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      width: 20px;
+      height: 20px;
+      background: url('@/assets/modal-close.png') no-repeat;
+      background-size: cover;
+      cursor: pointer;
+    }
+    .content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .content-left {
+      margin: 6px 0;
+    }
   }
 }
 </style>
